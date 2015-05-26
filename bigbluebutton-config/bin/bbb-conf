@@ -55,27 +55,41 @@
 
 PATH=$PATH:/sbin
 
-FREESWITCH_INIT_D="/etc/init.d/bbb-freeswitch"
+FREESWITCH_INIT_D="/etc/init.d/freeswitch"
+#FREESWITCH_CONF_DIR="/opt/freeswitch/conf"
+FREESWITCH_CONF_DIR="/etc/freeswitch"
+#FREESWITCH_PID="/opt/freeswitch/run/freeswitch.pid"
+FREESWITCH_PID="/var/run/freeswitch/freeswitch.pid"
+#FREESWITCH_BIN="/opt/freeswitch/bin/freeswitch"
+FREESWITCH_BIN="/usr/bin/freeswitch"
+
+RED5_INIT_D="/etc/init.d/red5"
 source /etc/bigbluebutton/bigbluebutton-release
 
 #
 # Figure out our environemtn
 #
 
-PLATFORM=ubuntu
+#PLATFORM=ubuntu
+PLATFORM=centos
 
-RED5_DIR=/usr/share/red5
+RED5_DIR=/var/lib/red5
 
 SERVLET_CONTAINER=tomcat7
-SERVLET_LOGS=/var/lib/$SERVLET_CONTAINER/logs
+SERVLET_LOGS=/var/log/$SERVLET_CONTAINER
 SERVLET_DIR=/var/lib/$SERVLET_CONTAINER/webapps
 
-if [ ! -f /usr/share/red5/webapps/bigbluebutton/WEB-INF/red5-web.xml ]; then
+#NGINX_VHOST_CONF_DIR="/etc/nginx/site-available"
+#BBB_VHOST="$NGINX_VHOST_CONF_DIR/bigbluebutton"
+NGINX_VHOST_CONF_DIR="/etc/nginx/conf.d"
+BBB_VHOST="$NGINX_VHOST_CONF_DIR/bigbluebutton.conf"
+
+if [ ! -f $RED5_DIR/webapps/bigbluebutton/WEB-INF/red5-web.xml ]; then
 	echo "#"
 	echo "# BigBlueButton does not appear to be installed.  Could not"
 	echo "# locate:"
 	echo "#"
-	echo "# /usr/share/red5/webapps/bigbluebutton/WEB-INF/red5-web.xml"
+	echo "# $RED5_DIR/webapps/bigbluebutton/WEB-INF/red5-web.xml"
 	exit 1
 fi
 
@@ -239,7 +253,7 @@ stop_bigbluebutton () {
 		stop bbb-html5
 	fi
 
-	/etc/init.d/bbb-red5 stop
+	$RED5_INIT_D stop
 	/etc/init.d/${SERVLET_CONTAINER} stop
 	/etc/init.d/nginx stop
         
@@ -260,8 +274,8 @@ stop_bigbluebutton () {
 start_bigbluebutton () {
 	$FREESWITCH_INIT_D start
 	
-	FREESWITCH_ESL_IP=$(sudo cat /opt/freeswitch/conf/autoload_configs/event_socket.conf.xml | grep 'name="listen-ip"' | cut -d\" -f4  | awk '{print $1}')
-	check_no_value listen-ip /opt/freeswitch/conf/autoload_configs/event_socket.conf.xml $FREESWITCH_ESL_IP
+	FREESWITCH_ESL_IP=$(sudo cat $FREESWITCH_CONF_DIR/autoload_configs/event_socket.conf.xml | grep 'name="listen-ip"' | cut -d\" -f4  | awk '{print $1}')
+	check_no_value listen-ip $FREESWITCH_CONF_DIR/autoload_configs/event_socket.conf.xml $FREESWITCH_ESL_IP
 
 	echo -n "Waiting for FreeSWITCH to start: "
 
@@ -274,7 +288,7 @@ start_bigbluebutton () {
 	echo
 
 	/etc/init.d/nginx start
-	/etc/init.d/bbb-red5 start
+	$RED5_INIT_D start
 	/etc/init.d/${SERVLET_CONTAINER} start
 
 	# monit will start libreoffice and bbb-rap-worker
@@ -302,8 +316,8 @@ start_bigbluebutton () {
 	#
 	echo -n "Waiting for BigBlueButton to finish starting up (this may take a minute): "
 
-	NGINX_IP=$(cat /etc/nginx/sites-available/bigbluebutton | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
-	check_no_value server_name /etc/nginx/sites-available/bigbluebutton $NGINX_IP
+	NGINX_IP=$(cat $BBB_VHOST | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
+	check_no_value server_name $BBB_VHOST $NGINX_IP
 
         if ! nc -z -w 1 127.0.0.1 9123; then
                 while ! nc -z -w 1 127.0.0.1 9123; do
@@ -324,7 +338,7 @@ start_bigbluebutton () {
 
 display_bigbluebutton_status () {
 	/etc/init.d/nginx status
-	/etc/init.d/bbb-red5 status
+	$RED5_INIT_D status
 	/etc/init.d/${SERVLET_CONTAINER} status
 }
 
@@ -333,8 +347,8 @@ enable_webrtc(){
 	sed -i "s@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=.*\"/>@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=$IP\"/>@g"  /opt/freeswitch/conf/vars.xml
 
 	# Set server ip address in red5 sip app. For flash client.
-	sed -i "s/bbb.sip.app.ip=.*/bbb.sip.app.ip=$IP/g" /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties
-	sed -i "s/freeswitch.ip=.*/freeswitch.ip=$IP/g" /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties
+	sed -i "s/bbb.sip.app.ip=.*/bbb.sip.app.ip=$IP/g" $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties
+	sed -i "s/freeswitch.ip=.*/freeswitch.ip=$IP/g" $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties
 
 	# Enable WebRTC in the client
 	sed -i "s@useWebRTCIfAvailable=\".*\"@useWebRTCIfAvailable=\"true\"@g" /var/www/bigbluebutton/client/conf/config.xml
@@ -356,8 +370,8 @@ disable_webrtc(){
 	sed -i "s@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=.*\"/>@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=127.0.0.1\"/>@g"  /opt/freeswitch/conf/vars.xml
 
 	# Set 127.0.0.1 in red5 sip app. For flash client.
-	sed -i "s/bbb.sip.app.ip=.*/bbb.sip.app.ip=127.0.0.1/g" /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties
-	sed -i "s/freeswitch.ip=.*/freeswitch.ip=127.0.0.1/g" /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties
+	sed -i "s/bbb.sip.app.ip=.*/bbb.sip.app.ip=127.0.0.1/g" $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties
+	sed -i "s/freeswitch.ip=.*/freeswitch.ip=127.0.0.1/g" $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties
 
 	# Disable WebRTC in the client
         sed -i "s@useWebRTCIfAvailable=\".*\"@useWebRTCIfAvailable=\"false\"@g" /var/www/bigbluebutton/client/conf/config.xml
@@ -617,7 +631,7 @@ check_configuration() {
 	#
 	# Check if we've got the voice conference servers properly installed and configured
 	#
-       if [ ! -d /opt/freeswitch/conf/jingle_profiles ]; then
+       if [ ! -d $FREESWITCH_CONF_DIR/jingle_profiles ]; then
 		echo
 		echo "# You have an older version of FreeSWITCH installed.  To upgrade"
 		echo "# enter the following commands"
@@ -632,19 +646,19 @@ check_configuration() {
 	#
 	# Check that freeswtich ESL matches the value in bigbluebutton.properties
 	#
-	if [ -f /opt/freeswitch/conf/autoload_configs/event_socket.conf.xml ]; then 
-		FREESWITCH_ESL_IP=$(sudo cat /opt/freeswitch/conf/autoload_configs/event_socket.conf.xml | grep 'name="listen-ip"' | cut -d\" -f4  | awk '{print $1}')
-		check_no_value event_socket /opt/freeswitch/conf/autoload_configs/event_socket.conf.xml $FREESWITCH_ESL_IP
+	if [ -f $FREESWITCH_CONF_DIR/autoload_configs/event_socket.conf.xml ]; then 
+		FREESWITCH_ESL_IP=$(sudo cat $FREESWITCH_CONF_DIR/autoload_configs/event_socket.conf.xml | grep 'name="listen-ip"' | cut -d\" -f4  | awk '{print $1}')
+		check_no_value event_socket $FREESWITCH_CONF_DIR/autoload_configs/event_socket.conf.xml $FREESWITCH_ESL_IP
 
-		ESL_HOST=$(cat /usr/share/red5/webapps/bigbluebutton/WEB-INF/bigbluebutton.properties | grep esl.host | sed 's/freeswitch.esl.host=//g')
-		check_no_value esl.host /usr/share/red5/webapps/bigbluebutton/WEB-INF/bigbluebutton.properties $ESL_HOST
+		ESL_HOST=$(cat $RED5_DIR/webapps/bigbluebutton/WEB-INF/bigbluebutton.properties | grep esl.host | sed 's/freeswitch.esl.host=//g')
+		check_no_value esl.host $RED5_DIR/webapps/bigbluebutton/WEB-INF/bigbluebutton.properties $ESL_HOST
 
 		if [ "$FREESWITCH_ESL_IP" != "$ESL_HOST" ]; then
 			echo 
 			echo "# The values for listen-ip in   "
-			echo "#     /opt/freeswitch/conf/autoload_configs/event_socket.conf.xml"
+			echo "#     $FREESWITCH_CONF_DIR/autoload_configs/event_socket.conf.xml"
 			echo "# do not match the settings for esl.host in"
-			echo "#     /usr/share/red5/webapps/bigbluebutton/WEB-INF/bigbluebutton.properties"
+			echo "#     $RED5_DIR/webapps/bigbluebutton/WEB-INF/bigbluebutton.properties"
 			echo 
 		fi
 	fi
@@ -653,7 +667,7 @@ check_configuration() {
 	#
 	# Check if BigBlueButto is defined in Nginx
 	#
-	if [ ! -L /etc/nginx/sites-enabled/bigbluebutton ]; then
+	if [ ! -L $BBB_VHOST ]; then
         	echo "# Nginx: BigBlueButton appears to be disabled"
         	echo "         - no symbolic link in /etc/nginx/sites-enabled/bigbluebutton to /etc/nginx/sites-available/bigbluebutton "
 	fi
@@ -700,8 +714,8 @@ check_configuration() {
 	#
 	# Check if the IP resolves to a different host
 	#
- 	NGINX_IP=$(cat /etc/nginx/sites-available/bigbluebutton | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
- 	check_no_value server_name /etc/nginx/sites-available/bigbluebutton $NGINX_IP
+ 	NGINX_IP=$(cat $BBB_VHOST | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
+ 	check_no_value server_name $BBB_VHOST $NGINX_IP
  	
 	HOSTS=$(which host)
 	if [ $HOSTS ]; then
@@ -712,7 +726,7 @@ check_configuration() {
 		if [ "$IP" != "$HOSTS" ]; then
 			echo "# IP does not match:"
 			echo "#                           IP from ifconfig: $IP"
-			echo "#   /etc/nginx/sites-available/bigbluebutton: $NGINX_IP"
+			echo "#   $BBB_VHOST: $NGINX_IP"
 		fi
 	fi
 
@@ -742,7 +756,7 @@ check_configuration() {
 	fi
 
 	BBB_SALT=$(cat ${SERVLET_DIR}/bigbluebutton/WEB-INF/classes/bigbluebutton.properties | tr -d '\r' | sed -n '/securitySalt/{s/.*=//;p}')
-	NGINX_IP=$(cat /etc/nginx/sites-available/bigbluebutton | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
+	NGINX_IP=$(cat $BBB_VHOST | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
 
 	if [ -f /usr/local/bigbluebutton/bbb-webhooks/config_local.coffee ]; then
 		WEBHOOKS_SALT=$(cat /usr/local/bigbluebutton/bbb-webhooks/config_local.coffee | grep '^[ \t]*config.bbb.sharedSecret[ =]*' | cut -d '"' -f2)
@@ -799,8 +813,8 @@ check_state() {
 		RUNNING_APPS="${RUNNING_APPS} red5"
 	fi	
 
-	if [ -a /opt/freeswitch/run/freeswitch.pid ]; then
-		if ! ps aux | grep -v grep | grep '[/]opt/freeswitch/bin/freeswitch' > /dev/null; then
+	if [ -a $FREESWITCH_PID ]; then
+		if ! ps aux | grep -v grep | grep '$FREESWITCH_BIN' > /dev/null; then
 			print_header
 			NOT_RUNNING_APPS="${NOT_RUNNING_APPS} freeswitch"
 		else
@@ -974,11 +988,11 @@ check_state() {
 	esac
 
 
-	if [ -f /usr/share/red5/log/sip.log ]; then
+	if [ -f $RED5_DIR/log/sip.log ]; then
 		#
 		# Checking if voice app registered successfully
 		#
-        	if cat /usr/share/red5/log/sip.log | grep -q "Failed to register with Sip Server"; then
+        	if cat $RED5_DIR/log/sip.log | grep -q "Failed to register with Sip Server"; then
                 	echo "# Error: The voice application failed to register with the sip server."
                 	echo "#   Try running: "
                 	echo "#"
@@ -991,12 +1005,12 @@ check_state() {
 		# check if sip.log has warnings where the user is not registered.  
 		#
 
-		if cat /usr/share/red5/log/sip.log | tail -n1 | grep -q "Call request for default but not registered"; then
+		if cat $RED5_DIR/log/sip.log | tail -n1 | grep -q "Call request for default but not registered"; then
 			echo "# Error: The voice app is not registered with SIP server. Audio might not be working correctly."
         		echo 
 		fi
 	else
-		echo "# Error: /usr/share/red5/log/sip.log"
+		echo "# Error: $RED5_DIR/log/sip.log"
         	echo 
         fi
 
@@ -1062,12 +1076,12 @@ check_state() {
 	fi
 
 
-		BBB_SIP_APP_IP=$(cat /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties | sed -n '/^bbb.sip.app.ip=/{s/.*=//;s/;//;p}')
+		BBB_SIP_APP_IP=$(cat $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties | sed -n '/^bbb.sip.app.ip=/{s/.*=//;s/;//;p}')
 		if [ $BBB_SIP_APP_IP != "127.0.0.1" ]; then
 			if [ "$BBB_SIP_APP_IP" != $IP ]; then
 				echo "# Warning: The setting of ($BBB_SIP_APP_IP) for bbb.sip.app.ip in"
 				echo "#"
-				echo "#    /usr/share/red5/webapps/sip/WEB-INF/bigbluebutton-sip.properties"
+				echo "#    $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties"
 				echo "#"
 				echo "# does not match the local IP address ($IP)."
 				echo "# (This is OK if you've manually changed the values to an external "
@@ -1199,9 +1213,16 @@ check_state() {
 if [ $CHECK ]; then
 	need_root
 	
-	echo 
-        echo "BigBlueButton Server $BIGBLUEBUTTON_RELEASE ($(dpkg -l | grep bbb  | sed -n '/0.[0-9].[0-9]-1ubuntu/{s/.*ubuntu//;s/;//;p}' | awk '{ sum+=$1} END {print sum}'))"
-	echo "                    Kernel version:" `uname -r`
+	if [ $PLATFORM == "ubuntu" ]; then
+		echo 
+	    echo "BigBlueButton Server $BIGBLUEBUTTON_RELEASE ($(dpkg -l | grep bbb  | sed -n '/0.[0-9].[0-9]-1ubuntu/{s/.*ubuntu//;s/;//;p}' | awk '{ sum+=$1} END {print sum}'))"
+		echo "                    Kernel version:" `uname -r`
+	elif [ $PLATFORM == "centos" ]; then
+		echo 
+		echo "TODO:"
+	    echo "BigBlueButton Server $BIGBLUEBUTTON_RELEASE ($(rpm -qa | grep bbb  | sed -n '/0.[0-9].[0-9]-1ubuntu/{s/.*ubuntu//;s/;//;p}' | awk '{ sum+=$1} END {print sum}'))"
+		echo "                    Kernel version:" `uname -r`
+	fi
 
 	if [ -e /etc/lsb-release ]; then
 		source /etc/lsb-release;
@@ -1226,9 +1247,9 @@ if [ $CHECK ]; then
 	echo "                              Red5: $RED5_IP"
 	echo "              useWebrtcIfAvailable: $WEBRTC_ENABLED_CLIENT"
 
-	WEBRTC_SOCKET=$(sudo cat /opt/freeswitch/conf/sip_profiles/external.xml | sed -n '/ws-binding/{s/.*value="://;s/".*//;p}')
+	WEBRTC_SOCKET=$(sudo cat $FREESWITCH_CONF_DIR/sip_profiles/external.xml | sed -n '/ws-binding/{s/.*value="://;s/".*//;p}')
 	echo
-	echo "/opt/freeswitch/conf/sip_profiles/external.xml (FreeSWITCH)"
+	echo "$FREESWITCH_CONF_DIR/sip_profiles/external.xml (FreeSWITCH)"
 	echo "                    websocket port: $WEBRTC_SOCKET"	
 	WEBRTC_ENABLED=$(grep -i webrtc /var/www/bigbluebutton/client/conf/config.xml | cut -d '"' -f2)
 	echo "                    WebRTC enabled: $WEBRTC_ENABLED"	
@@ -1237,11 +1258,11 @@ if [ $CHECK ]; then
 #        echo "          host for bbb-web interface: $HOST"
 
 	echo
-	echo "/etc/nginx/sites-available/bigbluebutton (nginx)"
-	NGINX_IP=$(cat /etc/nginx/sites-available/bigbluebutton | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
+	echo "$BBB_VHOST (nginx)"
+	NGINX_IP=$(cat $BBB_VHOST | sed -n '/server_name/{s/.*name[ ]*//;s/;//;p}')
 	echo "                       server name: $NGINX_IP"
 
-	PORT=$(cat /etc/nginx/sites-available/bigbluebutton | sed -n '/listen/{s/.*listen[ ]*//;s/;//;p}')
+	PORT=$(cat $BBB_VHOST | sed -n '/listen/{s/.*listen[ ]*//;s/;//;p}')
 	echo "                              port: $PORT"
 
 	BBB_CLIENT_DOC_ROOT=$(cat /etc/bigbluebutton/nginx/client.nginx | grep \/client -A 1 | head -n 2 | grep root | sed -n '{s/[ \t]*root[ ]*//;s/;//;p}')
@@ -1276,13 +1297,13 @@ if [ $CHECK ]; then
 	CONFERENCING_MODULE="FreeSWITCH"
 
 	echo
-	echo "/usr/share/red5/webapps/bigbluebutton/WEB-INF/red5-web.xml (red5)"
+	echo "$RED5_DIR/webapps/bigbluebutton/WEB-INF/red5-web.xml (red5)"
 	echo "                  voice conference: $CONFERENCING_MODULE"
 
-	CAPTURE_VIDEO="$(cat /usr/share/red5/webapps/video/WEB-INF/red5-web.xml | sed -n '/recordVideoStream/{s/^.*="//g;s/"\/>//g;p}')"
+	CAPTURE_VIDEO="$(cat $RED5_DIR/webapps/video/WEB-INF/red5-web.xml | sed -n '/recordVideoStream/{s/^.*="//g;s/"\/>//g;p}')"
 	echo "                     capture video: $CAPTURE_VIDEO"
 
-	CAPTURE_DESKTOP="$(cat /usr/share/red5/webapps/deskshare/WEB-INF/red5-web.xml | grep -m 1 '<constructor-arg index="0" value'  | sed -n '/constructor-arg/{s/^.*="//g;s/"\/>//g;p}')"
+	CAPTURE_DESKTOP="$(cat $RED5_DIR/webapps/deskshare/WEB-INF/red5-web.xml | grep -m 1 '<constructor-arg index="0" value'  | sed -n '/constructor-arg/{s/^.*="//g;s/"\/>//g;p}')"
 	echo "                   capture desktop: $CAPTURE_DESKTOP"
 
 
@@ -1441,8 +1462,8 @@ if [ -n "$HOST" ]; then
 	echo "Assigning $HOST for rtmp:// in /var/www/bigbluebutton/client/conf/config.xml"
 	sudo sed -i "s/rtmp:\/\/\([^\"\/]*\)\([\"\/]\)/rtmp:\/\/$HOST\2/g" /var/www/bigbluebutton/client/conf/config.xml
 
-	echo "Assigning $HOST for servername in /etc/nginx/sites-available/bigbluebutton"
-	sudo sed -i "s/server_name  .*/server_name  $HOST;/g" /etc/nginx/sites-available/bigbluebutton
+	echo "Assigning $HOST for servername in $BBB_VHOST"
+	sudo sed -i "s/server_name  .*/server_name  $HOST;/g" $BBB_VHOST
 
 	#
 	# Update configuration for BigBlueButton client
