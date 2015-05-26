@@ -74,6 +74,8 @@ source /etc/bigbluebutton/bigbluebutton-release
 PLATFORM=centos
 
 RED5_DIR=/var/lib/red5
+#RED5_LOG_DIR=$RED5_DIR/log
+RED5_LOG_DIR=/var/log/red5
 
 SERVLET_CONTAINER=tomcat7
 SERVLET_LOGS=/var/log/$SERVLET_CONTAINER
@@ -257,7 +259,7 @@ stop_bigbluebutton () {
 	/etc/init.d/${SERVLET_CONTAINER} stop
 	/etc/init.d/nginx stop
         
-	if [ -a /opt/freeswitch/run/freeswitch.pid ]; then
+	if [ -a $FREESWITCH_PID ]; then
 		$FREESWITCH_INIT_D stop
 	fi
         
@@ -344,7 +346,7 @@ display_bigbluebutton_status () {
 
 enable_webrtc(){
 	# Set server ip address in FreeSWITCH
-	sed -i "s@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=.*\"/>@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=$IP\"/>@g"  /opt/freeswitch/conf/vars.xml
+	sed -i "s@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=.*\"/>@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=$IP\"/>@g"  $FREESWITCH_CONF_DIR/vars.xml
 
 	# Set server ip address in red5 sip app. For flash client.
 	sed -i "s/bbb.sip.app.ip=.*/bbb.sip.app.ip=$IP/g" $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties
@@ -354,7 +356,7 @@ enable_webrtc(){
 	sed -i "s@useWebRTCIfAvailable=\".*\"@useWebRTCIfAvailable=\"true\"@g" /var/www/bigbluebutton/client/conf/config.xml
 
 	# Enable port 5066 in FreeSWITCH
-	sed -i 's/^.*<!--<param name="ws-binding"  value=":5066"\/>-->.*$/\t<param name="ws-binding"  value=":5066"\/>/g' /opt/freeswitch/conf/sip_profiles/external.xml
+	sed -i 's/^.*<!--<param name="ws-binding"  value=":5066"\/>-->.*$/\t<param name="ws-binding"  value=":5066"\/>/g' $FREESWITCH_CONF_DIR/sip_profiles/external.xml
 
         sed -i "s/proxy_pass .*/proxy_pass http:\/\/$IP:5066;/g" /etc/bigbluebutton/nginx/sip.nginx
 
@@ -367,7 +369,7 @@ enable_webrtc(){
 
 disable_webrtc(){
 	# Set 127.0.0.1 in FreeSWITCH
-	sed -i "s@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=.*\"/>@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=127.0.0.1\"/>@g"  /opt/freeswitch/conf/vars.xml
+	sed -i "s@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=.*\"/>@<X-PRE-PROCESS cmd=\"set\" data=\"local_ip_v4=127.0.0.1\"/>@g"  $FREESWITCH_CONF_DIR/vars.xml
 
 	# Set 127.0.0.1 in red5 sip app. For flash client.
 	sed -i "s/bbb.sip.app.ip=.*/bbb.sip.app.ip=127.0.0.1/g" $RED5_DIR/webapps/sip/WEB-INF/bigbluebutton-sip.properties
@@ -377,7 +379,7 @@ disable_webrtc(){
         sed -i "s@useWebRTCIfAvailable=\".*\"@useWebRTCIfAvailable=\"false\"@g" /var/www/bigbluebutton/client/conf/config.xml
 
 	# Disable port 5066 in FreeSWITCH
-	sed -i 's/^.*<param name="ws-binding"  value=":5066"\/>.*$/\t<!--<param name="ws-binding"  value=":5066"\/>-->/g' /opt/freeswitch/conf/sip_profiles/external.xml
+	sed -i 's/^.*<param name="ws-binding"  value=":5066"\/>.*$/\t<!--<param name="ws-binding"  value=":5066"\/>-->/g' $FREESWITCH_CONF_DIR/sip_profiles/external.xml
 
         sed -i "s/proxy_pass .*/proxy_pass http:\/\/127.0.0.1:5066;/g" /etc/bigbluebutton/nginx/sip.nginx
 
@@ -931,7 +933,7 @@ check_state() {
 	AVAIL_RED5_LOG=""
 	UNAVAIL_RED5_LOG=""
 	for file in $RED5_LOG_FILES ; do
-		if [ ! -f $RED5_DIR/log/$file.log ]; then
+		if [ ! -f $RED5_LOG_DIR/$file.log ]; then
 			UNAVAIL_RED5_LOG="${UNAVAIL_RED5_LOG} $file.log"
 		else
 			AVAIL_RED5_LOG="${AVAIL_RED5_LOG} $file.log"
@@ -939,7 +941,7 @@ check_state() {
 	done
 
 	if [ "$UNAVAIL_RED5_LOG" != "" ]; then
-		echo "# Unavailable Red5 logs ($RED5_DIR/log): $UNAVAIL_RED5_LOG"
+		echo "# Unavailable Red5 logs ($RED5_LOG_DIR): $UNAVAIL_RED5_LOG"
 	fi
 
 
@@ -948,12 +950,12 @@ check_state() {
 	#
 	BBB_APPS="sip video bigbluebutton deskshare"
 	for bbb_app in $BBB_APPS ; do
-		if [ -a $RED5_DIR/log/$bbb_app.log ]; then
-			if cat $RED5_DIR/log/$bbb_app.log | tail -n1 | grep -q "Starting up context"; then
+		if [ -a $RED5_LOG_DIR/$bbb_app.log ]; then
+			if cat $RED5_LOG_DIR/$bbb_app.log | tail -n1 | grep -q "Starting up context"; then
 				echo "#    $bbb_app did not start properly"
 			fi
 		else
-			echo "#    $RED5_DIR/log/$bbb_app.log not found"
+			echo "#    $RED5_LOG_DIR/$bbb_app.log not found"
 		fi
 	done
 
@@ -988,11 +990,11 @@ check_state() {
 	esac
 
 
-	if [ -f $RED5_DIR/log/sip.log ]; then
+	if [ -f $RED5_LOG_DIR/sip.log ]; then
 		#
 		# Checking if voice app registered successfully
 		#
-        	if cat $RED5_DIR/log/sip.log | grep -q "Failed to register with Sip Server"; then
+        	if cat $RED5_LOG_DIR/sip.log | grep -q "Failed to register with Sip Server"; then
                 	echo "# Error: The voice application failed to register with the sip server."
                 	echo "#   Try running: "
                 	echo "#"
@@ -1005,12 +1007,12 @@ check_state() {
 		# check if sip.log has warnings where the user is not registered.  
 		#
 
-		if cat $RED5_DIR/log/sip.log | tail -n1 | grep -q "Call request for default but not registered"; then
+		if cat $RED5_LOG_DIR/sip.log | tail -n1 | grep -q "Call request for default but not registered"; then
 			echo "# Error: The voice app is not registered with SIP server. Audio might not be working correctly."
         		echo 
 		fi
 	else
-		echo "# Error: $RED5_DIR/log/sip.log"
+		echo "# Error: $RED5_LOG_DIR/sip.log"
         	echo 
         fi
 
@@ -1025,13 +1027,13 @@ check_state() {
 	# Check that bigbluebutton in red5 has started propertly (less than 100 lines indicates that it
 	# didn't start)
 	# 
-	if [ -f $RED5_DIR/log/bigbluebutton.log ]; then
-		BBB_RED5_LOG=$(stat -c%s $RED5_DIR/log/bigbluebutton.log)
+	if [ -f $RED5_LOG_DIR/bigbluebutton.log ]; then
+		BBB_RED5_LOG=$(stat -c%s $RED5_LOG_DIR/bigbluebutton.log)
 		if [ $BBB_RED5_LOG -lt 100 ]; then
-        		echo "#       bigbluebutton failed to start: $RED5_DIR/log/bigbluebutton.log (red5)"
+        		echo "#       bigbluebutton failed to start: $RED5_LOG_DIR/bigbluebutton.log (red5)"
 		fi
 	else
-		echo "#      No $RED5_DIR/log/bigbluebutton.log"
+		echo "#      No $RED5_LOG_DIR/bigbluebutton.log"
 	fi
 
 	#
