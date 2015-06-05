@@ -37,6 +37,7 @@
 
 BASE=/var/bigbluebutton/recording
 STATUS=$BASE/status
+RED5_DIR=/var/lib/red5
 source /etc/bigbluebutton/bigbluebutton-release
 
 SERVLET_CONTAINER=tomcat7
@@ -368,7 +369,7 @@ if [ $DELETE ]; then
 
   rm -rf /var/bigbluebutton/recording/raw/$MEETING_ID*
 
-  rm -rf /usr/share/red5/webapps/video/streams/$MEETING_ID
+  rm -rf $RED5_DIR/webapps/video/streams/$MEETING_ID
   rm -f /var/bigbluebutton/deskshare/$MEETING_ID*.flv
   rm -f /var/freeswitch/meetings/$MEETING_ID*.wav
   rm -rf /var/bigbluebutton/$MEETING_ID
@@ -395,7 +396,7 @@ if [ $DELETEALL ]; then
 
   rm -rf /var/bigbluebutton/recording/raw/*
   
-  find /usr/share/red5/webapps/video/streams -name "*.flv" -exec rm '{}' \;
+  find $RED5_DIR/webapps/video/streams -name "*.flv" -exec rm '{}' \;
   rm -f /var/bigbluebutton/deskshare/*.flv
   rm -f /var/freeswitch/meetings/*.wav
 
